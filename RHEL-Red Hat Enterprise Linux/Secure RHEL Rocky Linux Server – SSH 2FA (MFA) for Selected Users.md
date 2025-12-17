@@ -1,33 +1,33 @@
-# 🔐 Secure Ubuntu Server User Access & SSH Configuration
+# 🔐 Secure RHEL Server User Access & SSH Configuration
 
-> **Enterprise-grade SOP for safe, auditable, and repeatable SSH access on Ubuntu servers (AWS EC2 & beyond).**
+> **Enterprise‑grade SOP for safe, auditable, and repeatable SSH access on Red Hat Enterprise Linux (RHEL) servers (AWS EC2 & on‑prem).**
 
 ---
 
 ## 📌 Overview
 
-This document provides a **production-ready Standard Operating Procedure (SOP)** for managing **user access and SSH configuration** on **Ubuntu servers**, with first‑class support for **AWS EC2**.
+This document provides a **production‑ready Standard Operating Procedure (SOP)** for managing **user access and SSH configuration** on **Red Hat Enterprise Linux (RHEL 8/9)** systems, with support for **AWS EC2 and on‑prem deployments**.
 
 It is intentionally written to be:
 
-* 🔁 **Repeatable** — clear steps that work the same way every time
-* 🔍 **Auditable** — explicit controls, validations, and logs
+* 🔁 **Repeatable** — deterministic steps that behave consistently
+* 🔍 **Auditable** — explicit controls, logs, and validation points
 * 🛡️ **Security‑first** — least privilege, no shortcuts
 * 🏢 **Enterprise & compliance aligned** — suitable for regulated environments
 
-The SOP minimizes operational risk, **prevents administrative lockout**, and establishes a hardened SSH baseline suitable for long‑term operations.
+This SOP minimizes operational risk, **prevents administrative lockout**, and establishes a hardened SSH baseline aligned with Red Hat and CIS benchmarks.
 
 ---
 
 ## 📄 Document Control
 
-| Item          | Details                                                  |
-| ------------- | -------------------------------------------------------- |
-| Document Name | Secure Ubuntu Server User Access & SSH Configuration     |
-| Environment   | Ubuntu Server (AWS EC2 / On‑prem compatible)             |
-| Scope         | User access, SSH hardening, key management               |
-| Audience      | Cloud Engineers, DevOps Engineers, System Administrators |
-| Owner         | Platform / Infrastructure / DevOps Team                  |
+| Item          | Details                                            |
+| ------------- | -------------------------------------------------- |
+| Document Name | Secure RHEL Server User Access & SSH Configuration |
+| Environment   | RHEL 8 / RHEL 9 (AWS EC2 & On‑prem)                |
+| Scope         | User access, SSH hardening, key management         |
+| Audience      | Linux Admins, Cloud Engineers, DevOps Engineers    |
+| Owner         | Platform / Infrastructure / DevOps Team            |
 
 ---
 
@@ -35,12 +35,12 @@ The SOP minimizes operational risk, **prevents administrative lockout**, and est
 
 The purpose of this SOP is to establish a **secure, repeatable, and auditable process** to:
 
-* Create a dedicated administrative user on Ubuntu
+* Create a dedicated administrative user on RHEL
 * Enforce **key‑based SSH authentication only**
 * Apply correct ownership and filesystem permissions
 * Deploy a **hardened and future‑proof SSH configuration**
 * Ensure continuous administrative access (break‑glass readiness)
-* Meet **enterprise security and compliance** expectations
+* Meet **enterprise security and compliance** requirements
 
 ---
 
@@ -49,36 +49,37 @@ The purpose of this SOP is to establish a **secure, repeatable, and auditable pr
 * SSH private keys are treated as **privileged credentials**
 * Password‑based SSH authentication is **prohibited**
 * Direct root login over SSH is **never allowed**
-* Access must be **explicitly granted and attributable** to a user
-* At least one **break‑glass access path** must always be maintained
+* Access must be **explicitly granted and attributable**
+* At least one **break‑glass access path** must always exist
 
 ---
 
 ## ✅ Prerequisites
 
-* Ubuntu Server running on AWS EC2 (or equivalent environment)
-* SSH access using the default `ubuntu` user
-* Local SSH private key (`.pem`) available
-* User has `sudo` privileges
-* AWS Security Group restricts **port 22** to approved source IPs only
+* RHEL 8 or RHEL 9 system
+* SSH access using an existing administrative user (e.g. `ec2-user`)
+* Local SSH private key available
+* User has `sudo` access via the **wheel** group
+* AWS Security Group / firewall allows **port 22** from approved IPs only
+* SELinux enabled (recommended)
 
 ---
 
-## 🧠 Default Ubuntu EC2 Access Model
+## 🧠 Default RHEL Access Model
 
-Understanding the default model is critical to avoid lockout:
+Understanding the default RHEL model is critical:
 
-* Default SSH user: `ubuntu`
-* SSH keys are injected **only for `ubuntu`** at instance launch
-* Root account exists but is **disabled for SSH**
-* Any additional user **must be explicitly configured** with SSH keys
+* Root account exists but is **disabled for SSH login**
+* Administrative access is provided via users in the **wheel** group
+* SSH keys must be configured **per user**
+* Authentication logs are written to `/var/log/secure`
 
 ---
 
 ## 🪜 Step 1: Verify Administrative Access
 
 ```bash
-ssh -i yourkey.pem ubuntu@<EC2_PUBLIC_IP>
+ssh -i yourkey.pem ec2-user@<SERVER_IP>
 sudo whoami
 ```
 
@@ -95,14 +96,15 @@ This confirms administrative access before making changes.
 ## 🪜 Step 2: Create a Dedicated Administrative User
 
 ```bash
-sudo adduser mess-central-admin
-sudo usermod -aG sudo mess-central-admin
+sudo useradd -m -c "RHEL Admin User" mess-central-admin
+sudo passwd mess-central-admin
+sudo usermod -aG wheel mess-central-admin
 ```
 
 **Outcome:**
 
 * Administrative user created
-* Full privileged access granted via `sudo` (no root login required)
+* Privileged access granted via `sudo` (wheel group)
 
 ---
 
@@ -118,7 +120,7 @@ sudo chmod 700 /home/mess-central-admin/.ssh
 ### Copy Existing Authorized Keys
 
 ```bash
-sudo cp /home/ubuntu/.ssh/authorized_keys \
+sudo cp /home/ec2-user/.ssh/authorized_keys \
         /home/mess-central-admin/.ssh/authorized_keys
 ```
 
@@ -154,10 +156,10 @@ ls -ld /home/mess-central-admin \
 Edit the SSH daemon configuration:
 
 ```bash
-sudo nano /etc/ssh/sshd_config
+sudo vi /etc/ssh/sshd_config
 ```
 
-### ✅ Approved & Hardened Configuration
+### ✅ Approved & Hardened Configuration (RHEL)
 
 ```conf
 Include /etc/ssh/sshd_config.d/*.conf
@@ -181,7 +183,7 @@ PasswordAuthentication no
 KbdInteractiveAuthentication no
 ChallengeResponseAuthentication no
 
-AllowUsers ubuntu mess-central-admin
+AllowUsers ec2-user mess-central-admin
 
 MaxAuthTries 3
 LoginGraceTime 30
@@ -198,19 +200,17 @@ PermitTunnel no
 GatewayPorts no
 PermitTTY yes
 
-SyslogFacility AUTH
+SyslogFacility AUTHPRIV
 LogLevel VERBOSE
 
 AcceptEnv LANG LC_*
 PermitUserEnvironment no
 
-Subsystem sftp /usr/lib/openssh/sftp-server
+Subsystem sftp /usr/libexec/openssh/sftp-server
 
 Match User mess-central-admin
     PubkeyAuthentication yes
     PasswordAuthentication no
-
-
 ```
 
 ---
@@ -219,11 +219,11 @@ Match User mess-central-admin
 
 ```bash
 sudo sshd -t
-sudo systemctl restart ssh
-sudo systemctl status ssh
+sudo systemctl restart sshd
+sudo systemctl status sshd
 ```
 
-> ⚠️ **Keep the existing SSH session open** until validation is complete to avoid lockout.
+> ⚠️ **Keep the existing SSH session open** until validation is complete.
 
 ---
 
@@ -232,7 +232,7 @@ sudo systemctl status ssh
 From your local machine:
 
 ```bash
-ssh -i yourkey.pem mess-central-admin@<EC2_PUBLIC_IP>
+ssh -i yourkey.pem mess-central-admin@<SERVER_IP>
 ```
 
 **Expected outcome:**
@@ -248,15 +248,16 @@ ssh -i yourkey.pem mess-central-admin@<EC2_PUBLIC_IP>
 ### Monitor Authentication Logs
 
 ```bash
-sudo tail -f /var/log/auth.log
+sudo tail -f /var/log/secure
 ```
 
 **Common causes of failure:**
 
 * Incorrect permissions on `.ssh` or `authorized_keys`
-* Incorrect file ownership
+* Incorrect ownership
 * Missing or malformed public key
 * User not listed in `AllowUsers`
+* SELinux context issues
 
 ---
 
@@ -275,8 +276,6 @@ sudo mv /home/mess-central-admin/.ssh/authorized_keys \
         /home/mess-central-admin/.ssh/authorized_keys.disabled
 ```
 
-This action immediately blocks SSH access while preserving the user account.
-
 ---
 
 ## 🔁 SSH Key Rotation Procedure
@@ -290,7 +289,7 @@ ssh-keygen -t ed25519 -a 100 -C "mess-central-admin@company"
 ### Install the New Public Key
 
 ```bash
-sudo nano /home/mess-central-admin/.ssh/authorized_keys
+sudo vi /home/mess-central-admin/.ssh/authorized_keys
 ```
 
 Remove all old keys and add **only** the new public key.
@@ -317,14 +316,16 @@ sudo usermod -U mess-central-admin
 * One user = one SSH key (no sharing)
 * Rotate SSH keys every **90–180 days**
 * Keep password‑based SSH disabled permanently
-* Prefer **AWS SSM Session Manager** where available
+* Prefer **AWS SSM Session Manager** or Red Hat Identity Management where available
 * Maintain a documented and audited **break‑glass account**
+* Do not disable SELinux; fix contexts instead
 
 ---
 
 ## 📜 Compliance Alignment
 
-* CIS Linux & AWS Benchmarks
+* CIS Red Hat Enterprise Linux Benchmark
+* CIS AWS Foundations Benchmark
 * ISO/IEC 27001 — Access Control
 * SOC 2 — Logical Access Controls
 * NIST SP 800‑53
@@ -333,6 +334,6 @@ sudo usermod -U mess-central-admin
 
 ## ✅ Final Note
 
-This README defines a **production‑approved, enterprise‑ready SSH access baseline** for Ubuntu servers. It is intended to be reused across environments and adapted only where organizational policy requires.
+This README defines a **production‑approved, enterprise‑ready SSH access baseline** for RHEL systems. It is intended to be reused across environments and adapted only where organizational policy requires.
 
 *If a step is not explicit, repeatable, and reversible—it does not belong in production.*
